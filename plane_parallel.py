@@ -29,9 +29,10 @@ from __future__ import print_function
 
 
 # third party imports
-import scipy as sp
-import matplotlib.pyplot as plt
-from enthought.mayavi import mlab 
+from scipy import linspace, arange, sqrt, cumsum
+from numpy import ones, zeros, tensordot, array
+from enthought.mayavi.mlab import quiver3d, points3d, plot3d
+
 
 # my imports 
 from icosphere import IcoSphere, Icosahedron
@@ -64,21 +65,21 @@ class SpatialSet(object):
         self.hz = hz
         self.nz = (b-a) // hz
         # data
-        self.points = sp.linspace(a, b, self.nz)
-        self.boundary_points = sp.linspace(a, b, 2)
-        self.boundary_normals = sp.array([[0., 0.,-1.0], 
-                                          [0., 0., 1.0]])
+        self.points = linspace(a, b, self.nz)
+        self.boundary_points = linspace(a, b, 2)
+        self.boundary_normals = array([[0., 0.,-1.0], 
+                                       [0., 0., 1.0]])
 
         # data imbeded in three dimensions
         self.pz = self.points
-        self.px = sp.zeros(self.points.shape)
-        self.py = sp.zeros(self.points.shape)
-        self.points_3d = sp.zeros((self.pz.size, 3))
+        self.px = zeros(self.points.shape)
+        self.py = zeros(self.points.shape)
+        self.points_3d = zeros((self.pz.size, 3))
         self.points_3d[:,2] = self.pz
         self.bz = self.boundary_points
-        self.bx = sp.zeros(self.boundary_points.shape)
-        self.by = sp.zeros(self.boundary_points.shape)
-        self.boundary_points_3d = sp.zeros(self.boundary_normals.shape)
+        self.bx = zeros(self.boundary_points.shape)
+        self.by = zeros(self.boundary_points.shape)
+        self.boundary_points_3d = zeros(self.boundary_normals.shape)
         self.boundary_points_3d[:,2] = self.bz
 
 
@@ -86,8 +87,8 @@ class DirectionSet(IcoSphere, Icosahedron):
     """
     Define a set of directions by specifying the approximate gritpoint spacing.
     """
-    base_h = sp.sqrt(((Icosahedron.p[Icosahedron.bar[0,0]] - 
-                       Icosahedron.p[Icosahedron.bar[0,1]])**2).sum())
+    base_h = sqrt(((Icosahedron.p[Icosahedron.bar[0,0]] - 
+                    Icosahedron.p[Icosahedron.bar[0,1]])**2).sum())
     
     def __init__(self, h):
         " h = aproximate spacing "
@@ -108,19 +109,19 @@ def get_incoming_set(spatial_set, direction_set, mincosine=1e-8):
     v = direction_set.directions
     bp = spatial_set.boundary_points_3d
     bnorm = spatial_set.boundary_normals
-    direction_cosines = sp.tensordot(bnorm, v, axes=[(-1),(-1)])
+    direction_cosines = tensordot(bnorm, v, axes=[(-1),(-1)])
     incoming_bolean = direction_cosines < -mincosine
     
     shifts = incoming_bolean.sum(-1)
-    stops = sp.cumsum(shifts)
+    stops = cumsum(shifts)
     starts = starts = stops - shifts
     
     # initialize the incoming_set array and fill with points
     bpdim = bp.shape[-1]
     vdim = v.shape[-1]
     incoming_set_shape = (stops[-1], bpdim + vdim)
-    incoming_set = sp.zeros(incoming_set_shape)
-    for n, start, stop, shift in zip(sp.arange(bp.shape[0]), 
+    incoming_set = zeros(incoming_set_shape)
+    for n, start, stop, shift in zip(arange(bp.shape[0]), 
                                      starts, stops, shifts):
         incoming_set[start:stop, :bpdim] = bp[n]
         incoming_set[start:stop, bpdim:] = v[incoming_bolean[n], :]
@@ -135,19 +136,19 @@ def get_outgoing_set(spatial_set, direction_set, mincosine=1e-8):
     v = direction_set.directions
     bp = spatial_set.boundary_points_3d
     bnorm = spatial_set.boundary_normals
-    direction_cosines = sp.tensordot(bnorm, v, axes=[(-1),(-1)])
+    direction_cosines = tensordot(bnorm, v, axes=[(-1),(-1)])
     incoming_bolean = direction_cosines > mincosine
     
     shifts = incoming_bolean.sum(-1)
-    stops = sp.cumsum(shifts)
+    stops = cumsum(shifts)
     starts = starts = stops - shifts
     
     # initialize the incoming_set array and fill with points
     bpdim = bp.shape[-1]
     vdim = v.shape[-1]
     incoming_set_shape = (stops[-1], bpdim + vdim)
-    incoming_set = sp.zeros(incoming_set_shape)
-    for n, start, stop, shift in zip(sp.arange(bp.shape[0]), 
+    incoming_set = zeros(incoming_set_shape)
+    for n, start, stop, shift in zip(arange(bp.shape[0]), 
                                      starts, stops, shifts):
         incoming_set[start:stop, :bpdim] = bp[n]
         incoming_set[start:stop, bpdim:] = v[incoming_bolean[n], :]
@@ -164,18 +165,19 @@ def get_domain_set(spatial_set, direction_set):
 
     # define interior set 
     interior_set_shape = (p.shape[0], v.shape[0], 6)
-    interior_set = sp.zeros(interior_set_shape)
-    interior_set[:, :, :3] = sp.tensordot(sp.ones(v.shape[0]), p,
+    interior_set = zeros(interior_set_shape)
+    interior_set[:, :, :3] = tensordot(ones(v.shape[0]), p,
                                        axes=0).transpose(1,0,2)
-    interior_set[:, :, 3:] = sp.tensordot(sp.ones(p.shape[0]), v,
+    interior_set[:, :, 3:] = tensordot(ones(p.shape[0]), v,
                                        axes=0)
     newshape = (interior_set.size // 6, 6)
     # newshape = (interior_set_shape[0]*interior_set_shape[1], 6)
     return interior_set.reshape(newshape)
 
 
-# 
-# Define domain
+# ===============================================================================
+# Define Domain
+# ===============================================================================
 
 class Domain(object):
     """
@@ -219,11 +221,11 @@ class Domain(object):
         """
         fun_values = fun(self.points)
         args = tuple(self.points_3d.T) + (fun_values,)
-        mlab.plot3d(*args, **kwds)
+        plot3d(*args, **kwds)
 
         fun_boundary_values = fun(self.boundary_points)
         args = tuple(self.boundary_points_3d.T) + (fun_boundary_values,)
-        mlab.points3d(*args, scale_factor=.2, scale_mode='none')
+        points3d(*args, scale_factor=.2, scale_mode='none')
 
 
 
@@ -231,7 +233,7 @@ class Domain(object):
         " Plot the domain with a quiver plot "
         names = ['domain_set_3d', 'incoming_set_3d', 'outgoing_set_3d'] 
         if name in names:
-            mlab.quiver3d(*getattr(self, name).T, **kwds)
+            quiver3d(*getattr(self, name).T, **kwds)
         else:
             print("WARNING: name = {0} not in {1}".format(
                     name, str(names)))
